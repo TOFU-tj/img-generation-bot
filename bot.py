@@ -349,15 +349,21 @@ async def show_balance(message_or_callback, user_id: int):
     user = message_or_callback.from_user if isinstance(message_or_callback, Message) else message_or_callback.from_user
 
     photo = FSInputFile("img/banana3.png")
-    base_url = "https://t.me/tribute/app?startapp=ppf9"
+    base_url2 = "https://t.me/tribute/app?startapp=ppf9"
+    base_url5 = "https://t.me/tribute/app?startapp=ppgM"
+    base_url10 = "https://t.me/tribute/app?startapp=ppgN"
+    base_url30 = "https://t.me/tribute/app?startapp=ppgO"
+    base_url150 = "https://t.me/tribute/app?startapp=ppgQ"
+    base_url200 = "https://t.me/tribute/app?startapp=ppgS"
+   
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🍌 2 генерации — 110 ₽", url=base_url)],
-        [InlineKeyboardButton(text="🍌 5 генераций — 260 ₽", url=base_url)],
-        [InlineKeyboardButton(text="🍌 10 генераций — 490 ₽", url=base_url)],
-        [InlineKeyboardButton(text="⭐ 30 генераций — 1 350 ₽", url=base_url)],
-        [InlineKeyboardButton(text="🍌 150 генераций — 5 700 ₽", url=base_url)],
-        [InlineKeyboardButton(text="🍌 200 генераций — 7 400 ₽", url=base_url)],
+        [InlineKeyboardButton(text="🍌 2 генерации — 110 ₽", url=base_url2)],
+        [InlineKeyboardButton(text="🍌 5 генераций — 260 ₽", url=base_url5)],
+        [InlineKeyboardButton(text="🍌 10 генераций — 490 ₽", url=base_url10)],
+        [InlineKeyboardButton(text="⭐ 30 генераций — 1 350 ₽", url=base_url30)],
+        [InlineKeyboardButton(text="🍌 150 генераций — 5 700 ₽", url=base_url150)],
+        [InlineKeyboardButton(text="🍌 200 генераций — 7 400 ₽", url=base_url200)],
         [InlineKeyboardButton(text="↩️ Назад в меню", callback_data="back_to_modes")]
     ])
 
@@ -368,8 +374,7 @@ async def show_balance(message_or_callback, user_id: int):
         f"👤 <b>Ваш ник:</b> @{user.username or 'без ника'}\n\n"
         "⚠️ <b>ВАЖНО!</b>\n"
         "При оплате <u>обязательно</u> укажите ваш ID и ник в заказе.\n\n"
-        "⏰ <b><u>ТОКЕНЫ БУДУТ НАЧИСЛЕНЫ В ТЕЧЕНИЕ 10 МИНУТ\n"
-        "ПОСЛЕ ПОЛУЧЕНИЯ ОПЛАТЫ</u></b>\n\n"
+        "⏰ <b><u>ТОКЕНЫ НАЧИСЛЯЮТСЯ ПОСЛЕ РУЧНОЙ ПРОВЕРКИ ОПЛАТЫ НАШЕЙ ПОДДЕРЖКОЙ</u></b>\n\n"
         "👇 Выберите пакет генераций:"
     )
 
