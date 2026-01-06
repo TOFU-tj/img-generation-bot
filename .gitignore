@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# Env
+.env
+.venv/
+
+# DB
+telegram_users.db
+
+# OS
+.DS_Store
