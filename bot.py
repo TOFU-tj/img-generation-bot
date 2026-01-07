@@ -551,6 +551,36 @@ async def add_tokens(message: Message):
         f"✅ Начислено <b>{tokens}</b> генераций пользователю <code>{target_id}</code>"  
     )
 
+
+@router.message(Command("users"))
+async def list_users(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ У вас нет прав.")
+        return
+
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("""
+            SELECT telegram_id, username, generation_tokens
+            FROM users
+            ORDER BY generation_tokens DESC
+            LIMIT 50
+        """)
+        rows = await cursor.fetchall()
+
+    if not rows:
+        await message.answer("👀 Пользователей нет.")
+        return
+
+    text = "👥 <b>Пользователи:</b>\n\n"
+    for uid, username, tokens in rows:
+        text += (
+            f"🆔 <code>{uid}</code>\n"
+            f"👤 @{username or 'без ника'}\n"
+            f"🍌 Токены: <b>{tokens}</b>\n\n"
+        )
+
+    await message.answer(text[:4000])
+
 # ================== RUN ==================
 
 dp.include_router(router)
