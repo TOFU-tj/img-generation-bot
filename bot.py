@@ -301,6 +301,13 @@ async def back_to_modes(callback: CallbackQuery):
     await show_main_menu(callback)
     await callback.answer()
 
+@router.message(Command("txt2img"))
+async def txt2img(message: Message):
+    user_id = message.from_user.id
+    user_states[user_id] = {"mode": "txt2img"}
+
+    await message.answer("📏 Выберите соотношение сторон:")
+    await show_ratio_selection(message)
 
 
 
@@ -353,6 +360,7 @@ async def show_balance(message_or_callback, user_id: int):
     base_url5 = "https://t.me/tribute/app?startapp=ppgM"
     base_url10 = "https://t.me/tribute/app?startapp=ppgN"
     base_url30 = "https://t.me/tribute/app?startapp=ppgO"
+    base_url80 = "https://t.me/tribute/app?startapp=ppha"
     base_url150 = "https://t.me/tribute/app?startapp=ppgQ"
     base_url200 = "https://t.me/tribute/app?startapp=ppgS"
    
@@ -362,6 +370,7 @@ async def show_balance(message_or_callback, user_id: int):
         [InlineKeyboardButton(text="🍌 5 генераций — 260 ₽", url=base_url5)],
         [InlineKeyboardButton(text="🍌 10 генераций — 490 ₽", url=base_url10)],
         [InlineKeyboardButton(text="⭐ 30 генераций — 1 350 ₽", url=base_url30)],
+        [InlineKeyboardButton(text="🍌 80 генераций — 3 600 ₽ ₽", url=base_url80)],
         [InlineKeyboardButton(text="🍌 150 генераций — 5 700 ₽", url=base_url150)],
         [InlineKeyboardButton(text="🍌 200 генераций — 7 400 ₽", url=base_url200)],
         [InlineKeyboardButton(text="↩️ Назад в меню", callback_data="back_to_modes")]
