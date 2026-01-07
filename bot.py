@@ -166,9 +166,9 @@ async def show_ratio_selection(message: Message):
     
 async def show_ratio_selection_img2img(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="1:1", callback_data="set_ratio_img2img:1:1")],
-        [InlineKeyboardButton(text="16:9", callback_data="set_ratio_img2img:16:9")],
-        [InlineKeyboardButton(text="9:16", callback_data="set_ratio_img2img:9:16")],
+        [InlineKeyboardButton(text="1:1 (квадрат)", callback_data="set_ratio_img2img:1:1")],
+        [InlineKeyboardButton(text="16:9 (широкоформатный)", callback_data="set_ratio_img2img:16:9")],
+        [InlineKeyboardButton(text="9:16 (вертикальный)", callback_data="set_ratio_img2img:9:16")],
         [InlineKeyboardButton(text="4:3", callback_data="set_ratio_img2img:4:3")],
         [InlineKeyboardButton(text="3:2", callback_data="set_ratio_img2img:3:2")],
         [InlineKeyboardButton(text="↩️ Назад", callback_data="back_to_modes")]
@@ -192,73 +192,6 @@ async def set_ratio_img2img(callback: CallbackQuery):
         "📸 Теперь отправьте изображение"
     )
     await callback.answer()
-
-
-    
-# @router.callback_query(F.data == "back_to_modes")
-# async def back_to_modes(callback: CallbackQuery):
-#     # Очищаем режим, но сохраняем баланс и т.д.
-#     user_id = callback.from_user.id
-#     if user_id in user_states:
-#         # Удаляем только временные данные генерации
-#         user_states[user_id].pop("mode", None)
-#         user_states[user_id].pop("aspect_ratio", None)
-#         user_states[user_id].pop("images", None)
-    
-#     # Показываем выбор режима
-#     kb = InlineKeyboardMarkup(inline_keyboard=[
-#         [InlineKeyboardButton(text="🖼️ Создать картинку с нуля", callback_data="select_mode:txt2img")],
-#         [InlineKeyboardButton(text="📷 Рдактировать ваше фото", callback_data="select_mode:img2img")],
-#     ])
-#     await callback.message.edit_text(
-#         "🎨 <b>AI Image Generator</b>\n\nВыберите режим генерации:",
-#         reply_markup=kb
-#     )
-#     await callback.answer()
-
-
-# @router.callback_query(F.data == "back_to_modes")
-# async def back_to_modes(callback: CallbackQuery):
-#     user_id = callback.from_user.id
-
-#     user_states.pop(user_id, None)
-
-#     kb = InlineKeyboardMarkup(inline_keyboard=[
-#         [InlineKeyboardButton(text="🖼️ Создать картинку с нуля", callback_data="select_mode:txt2img")],
-#         [InlineKeyboardButton(text="📷 Редактировать ваше фото", callback_data="select_mode:img2img")],
-#     ])
-
-#     photo = FSInputFile("img/banana3.png")
-
-#     await callback.message.answer_photo(
-#         photo=photo,
-#         caption="🎨 <b>AI Image Generator</b>\n\nВыберите режим генерации:",
-#         reply_markup=kb
-#     )
-
-#     await callback.answer()
-
-
-# ================== COMMANDS ==================
-
-# @router.message(Command("start"))
-# async def start(message: Message):
-#     await register_user(message.from_user.id, message.from_user.username)
-    
-#     kb = InlineKeyboardMarkup(inline_keyboard=[
-#         [InlineKeyboardButton(text="🖼️ Создать картинку с нуля", callback_data="select_mode:txt2img")],
-#         [InlineKeyboardButton(text="📷 Рдактировать ваше фото", callback_data="select_mode:img2img")],
-#         # [InlineKeyboardButton(text="👤 Личный кабинет", callback_data=":personal_account")],
-#         [InlineKeyboardButton(text="💰 Получить токены", callback_data="banans:banans")]
-    
-#     ])
-    
-#     photo = FSInputFile("img/banana3.png")
-#     await message.answer_photo(
-#         photo=photo,
-#         caption="🎨 <b>AI Image Generator</b>\n\nВыберите режим генерации:\nПосле чего напишите что хотите сгенерировать",
-#         reply_markup=kb
-#     )
 
 async def show_main_menu(message_or_callback):
     kb = InlineKeyboardMarkup(inline_keyboard=[
