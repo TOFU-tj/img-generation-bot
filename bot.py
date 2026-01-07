@@ -252,7 +252,6 @@ async def handle_mode_selection(callback: CallbackQuery):
     user_states.setdefault(user_id, {})
 
     if mode == "txt2img":
-        await callback.message.answer("📏 Выберите соотношение сторон:")
         await show_ratio_selection(callback.message)
 
     elif mode == "img2img":
@@ -261,6 +260,7 @@ async def handle_mode_selection(callback: CallbackQuery):
 
     await callback.answer()
     await callback.message.edit_reply_markup(reply_markup=None)
+
 
 
 @router.callback_query(F.data.startswith("set_ratio:"))
