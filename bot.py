@@ -548,7 +548,7 @@ async def add_tokens(message: Message):
 
     # ✅ Ответ админу
     await message.answer(
-        f"✅ Начислено <b>{tokens}</b> генераций пользователю <code>{target_id}</code>"
+        f"✅ Начислено <b>{tokens}</b> генераций пользователю <code>{target_id}</code>"  
     )
 
 # ================== RUN ==================
