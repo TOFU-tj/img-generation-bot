@@ -193,6 +193,7 @@ async def set_ratio_img2img(callback: CallbackQuery):
     )
     await callback.answer()
 
+
 async def show_main_menu(message_or_callback):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🖼️ Создать картинку с нуля", callback_data="select_mode:txt2img")],
@@ -276,7 +277,7 @@ async def set_ratio(callback: CallbackQuery):
 
     await callback.answer("✅ Выбрано!")
     await callback.message.edit_text(
-        f"✅ Соотношение сторон: <b>{ratio}</b>\n\n\Пришлите промт ☺️")
+        f"✅ Соотношение сторон: <b>{ratio}</b>\n\nПришлите промт ☺️")
 
 @router.message(Command("ratio"))
 async def cmd_ratio(message: Message):
@@ -373,14 +374,21 @@ async def handle_photo(message: Message):
         await message.answer("📸 Фото добавлено! Можете написать промт.")
 
 # ================== TEXT / GENERATION ==================
+# @router.callback_query(F.data == "back_to_start")
+# async def back_to_start(callback: CallbackQuery):
+#     # Очищаем временные данные
+#     user_id = callback.from_user.id
+#     if user_id in user_states:
+#         user_states[user_id].pop("mode", None)
+#         user_states[user_id].pop("aspect_ratio", None)
+#         user_states[user_id].pop("images", None)
 @router.callback_query(F.data == "back_to_start")
 async def back_to_start(callback: CallbackQuery):
-    # Очищаем временные данные
-    user_id = callback.from_user.id
-    if user_id in user_states:
-        user_states[user_id].pop("mode", None)
-        user_states[user_id].pop("aspect_ratio", None)
-        user_states[user_id].pop("images", None)
+    # очищаем временное состояние
+    user_states.pop(callback.from_user.id, None)
+    # показываем главное меню
+    await show_main_menu(callback)
+    await callback.answer()
     
     # Показываем /start
     photo = FSInputFile("img/banana3.png")
@@ -453,7 +461,7 @@ async def generate(message: Message):
         image_url = str(output)
 
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Сгенерировать ещё", callback_data="back_to_start")]
+            [InlineKeyboardButton(text="🏠 Меню", callback_data="back_to_start")]
         ])
 
         await bot.send_photo(
