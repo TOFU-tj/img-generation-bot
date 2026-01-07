@@ -276,7 +276,7 @@ async def set_ratio(callback: CallbackQuery):
 
     await callback.answer("✅ Выбрано!")
     await callback.message.edit_text(
-        f"✅ Соотношение сторон: <b>{ratio}</b>\n\n")
+        f"✅ Соотношение сторон: <b>{ratio}</b>\n\n\Пришлите промт ☺️")
 
 @router.message(Command("ratio"))
 async def cmd_ratio(message: Message):
