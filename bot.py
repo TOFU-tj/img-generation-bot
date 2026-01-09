@@ -79,11 +79,6 @@ async def can_generate(telegram_id: int) -> str | None:
             return "paid"
 
     return None
-
-
-
-
-
 # ================== TOKENS ==================
 
 
@@ -103,11 +98,6 @@ async def commit_generation(telegram_id: int, gen_type: str):
                 SET generation_tokens = generation_tokens - 1
                 WHERE telegram_id = $1
             """, telegram_id)
-
-
-
-
-
 
 # ================== UTILS ==================
 
@@ -166,8 +156,6 @@ async def set_ratio_img2img(callback: CallbackQuery):
         )
     )
     await callback.answer()
-
-
 
 async def show_main_menu(message_or_callback):
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -266,8 +254,6 @@ async def set_ratio(callback: CallbackQuery):
 @router.message(Command("ratio"))
 async def cmd_ratio(message: Message):
     await show_ratio_selection(message)
-
-
 
 async def show_balance(message_or_callback, user_id: int):
     banans = await get_balance(user_id)
@@ -552,8 +538,6 @@ async def list_users(message: Message):
 
     await message.answer(text[:4000])
 
-
-    
 # ================== DB INIT ==================
 async def init_db():
     async with db.DB_POOL.acquire() as conn:
