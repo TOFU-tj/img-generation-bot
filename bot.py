@@ -179,7 +179,7 @@ async def show_main_menu(message_or_callback):
         [InlineKeyboardButton(text="💰 Получить токены", callback_data="banans:banans")]
     ])
 
-    photo = FSInputFile("img/banana3.png")
+    photo = FSInputFile("img/menu.png")
     caption = (
         "🎨 <b>AI Image Generator</b>\n\n"
         "Выберите режим генерации 👇"
@@ -277,23 +277,22 @@ async def show_balance(message_or_callback, user_id: int):
     user = message_or_callback.from_user if isinstance(message_or_callback, Message) else message_or_callback.from_user
 
     photo = FSInputFile("img/price.png")
-    base_url2 = "https://t.me/tribute/app?startapp=ppf9"
-    base_url5 = "https://t.me/tribute/app?startapp=ppgM"
-    base_url10 = "https://t.me/tribute/app?startapp=ppgN"
-    base_url30 = "https://t.me/tribute/app?startapp=ppgO"
-    base_url80 = "https://t.me/tribute/app?startapp=ppha"
-    base_url150 = "https://t.me/tribute/app?startapp=ppgQ"
-    base_url200 = "https://t.me/tribute/app?startapp=ppgS"
+    
+    base_url5 = "https://t.me/tribute/app?startapp=ppo9"
+    base_url10 = "https://t.me/tribute/app?startapp=ppoa"
+    base_url30 = "https://t.me/tribute/app?startapp=ppob"
+    base_url80 = "https://t.me/tribute/app?startapp=ppoc"
+    base_url150 = "https://t.me/tribute/app?startapp=ppod"
+    base_url200 = "https://t.me/tribute/app?startapp=ppoe"
    
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🍌 2 генерации — 110 ₽", url=base_url2)],
-        [InlineKeyboardButton(text="🍌 5 генераций — 260 ₽", url=base_url5)],
-        [InlineKeyboardButton(text="🍌 10 генераций — 490 ₽", url=base_url10)],
-        [InlineKeyboardButton(text="⭐ 30 генераций — 1 350 ₽", url=base_url30)],
-        [InlineKeyboardButton(text="🍌 80 генераций — 3 600 ₽ ₽", url=base_url80)],
-        [InlineKeyboardButton(text="🍌 150 генераций — 5 700 ₽", url=base_url150)],
-        [InlineKeyboardButton(text="🍌 200 генераций — 7 400 ₽", url=base_url200)],
+        [InlineKeyboardButton(text="🍌 5 генераций — 125 ₽", url=base_url5)],
+        [InlineKeyboardButton(text="🍌 10 генераций — 240 ₽", url=base_url10)],
+        [InlineKeyboardButton(text="⭐ 30 генераций — 480 ₽", url=base_url30)],
+        [InlineKeyboardButton(text="🍌 80 генераций — 960 ₽ ₽", url=base_url80)],
+        [InlineKeyboardButton(text="🍌 150 генераций — 1 650 ₽", url=base_url150)],
+        [InlineKeyboardButton(text="🍌 200 генераций — 1 800 ₽", url=base_url200)],
         [InlineKeyboardButton(text="↩️ Назад в меню", callback_data="back_to_modes")]
     ])
 
