@@ -119,28 +119,54 @@ async def use_free_generation(telegram_id: int) -> bool:
         return False
 
 async def can_generate(telegram_id: int) -> str | None:
-    if await use_free_generation(telegram_id):
-        return "free"
+    today = datetime.datetime.utcnow().date().isoformat()
 
     async with aiosqlite.connect(DB_NAME) as db:
+        # проверяем free
         cur = await db.execute("""
-        SELECT generation_tokens FROM users WHERE telegram_id = ?
+            SELECT used FROM daily_usage
+            WHERE telegram_id = ? AND date = ?
+        """, (telegram_id, today))
+        row = await cur.fetchone()
+
+        if row is None or row[0] < FREE_DAILY_LIMIT:
+            return "free"
+
+        # проверяем платные
+        cur = await db.execute("""
+            SELECT generation_tokens FROM users
+            WHERE telegram_id = ?
         """, (telegram_id,))
         row = await cur.fetchone()
+
         if row and row[0] > 0:
             return "paid"
 
     return None
 
-async def finalize_generation(telegram_id: int, gen_type: str):
-    if gen_type == "paid":
-        async with aiosqlite.connect(DB_NAME) as db:
+async def commit_generation(telegram_id: int, gen_type: str):
+    today = datetime.datetime.utcnow().date().isoformat()
+
+    async with aiosqlite.connect(DB_NAME) as db:
+        if gen_type == "free":
             await db.execute("""
-            UPDATE users
-            SET generation_tokens = generation_tokens - 1
-            WHERE telegram_id = ?
+                INSERT INTO daily_usage (telegram_id, date, used)
+                VALUES (?, ?, 1)
+                ON CONFLICT(telegram_id, date)
+                DO UPDATE SET used = used + 1
+            """, (telegram_id, today))
+
+        elif gen_type == "paid":
+            await db.execute("""
+                UPDATE users
+                SET generation_tokens = generation_tokens - 1
+                WHERE telegram_id = ?
             """, (telegram_id,))
-            await db.commit()
+
+        await db.commit()
+
+
+
 
 # ================== UTILS ==================
 
@@ -180,18 +206,26 @@ async def set_ratio_img2img(callback: CallbackQuery):
     user_id = callback.from_user.id
     ratio = callback.data.split(":", 1)[1]
 
-    if user_id not in user_states:
-        user_states[user_id] = {}
+    user_states.setdefault(user_id, {})
+    user_states[user_id].update({
+        "mode": "img2img",
+        "aspect_ratio": ratio,
+        "images": []
+    })
+    photo = FSInputFile("img/edit_img.png")
+    # убираем кнопки у старого сообщения
+    await callback.message.edit_reply_markup(reply_markup=None)
 
-    user_states[user_id]["mode"] = "img2img"
-    user_states[user_id]["aspect_ratio"] = ratio
-    user_states[user_id]["images"] = []
-
-    await callback.message.answer(
-        f"✅ Соотношение сторон: <b>{ratio}</b>\n\n"
-        "📸 Теперь отправьте изображение"
+    # отправляем новое сообщение с фото
+    await callback.message.answer_photo(
+        photo=photo,
+        caption=(
+            f"✅ <b>Соотношение сторон выбрано:</b> {ratio}\n\n"
+            "📸 Теперь отправьте изображение"
+        )
     )
     await callback.answer()
+
 
 
 async def show_main_menu(message_or_callback):
@@ -240,7 +274,6 @@ async def txt2img(message: Message):
     user_id = message.from_user.id
     user_states[user_id] = {"mode": "txt2img"}
 
-    await message.answer("📏 Выберите соотношение сторон:")
     await show_ratio_selection(message)
 
 
@@ -269,15 +302,25 @@ async def set_ratio(callback: CallbackQuery):
     user_id = callback.from_user.id
     ratio = callback.data.split(":", 1)[1]
 
-    if user_id not in user_states:
-        user_states[user_id] = {}
-    
+    user_states.setdefault(user_id, {})
     user_states[user_id]["aspect_ratio"] = ratio
-    user_states[user_id]["mode"] = "txt2img"  # Убедимся, что режим установлен
+    user_states[user_id]["mode"] = "txt2img"
 
-    await callback.answer("✅ Выбрано!")
-    await callback.message.edit_text(
-        f"✅ Соотношение сторон: <b>{ratio}</b>\n\nПришлите промт ☺️")
+    photo = FSInputFile("img/generate_img.png")
+
+    # убираем кнопки у старого сообщения
+    await callback.message.edit_reply_markup(reply_markup=None)
+
+    # отправляем новое сообщение с картинкой
+    await callback.message.answer_photo(
+        photo=photo,
+        caption=(
+            f"✅ <b>Соотношение сторон выбрано:</b> {ratio}\n\n"
+            "✍️ Теперь пришлите промт ☺️"
+        )
+    )
+
+    await callback.answer()
 
 @router.message(Command("ratio"))
 async def cmd_ratio(message: Message):
@@ -289,7 +332,7 @@ async def show_balance(message_or_callback, user_id: int):
     banans = await get_balance(user_id)
     user = message_or_callback.from_user if isinstance(message_or_callback, Message) else message_or_callback.from_user
 
-    photo = FSInputFile("img/banana3.png")
+    photo = FSInputFile("img/price.png")
     base_url2 = "https://t.me/tribute/app?startapp=ppf9"
     base_url5 = "https://t.me/tribute/app?startapp=ppgM"
     base_url10 = "https://t.me/tribute/app?startapp=ppgN"
@@ -313,6 +356,7 @@ async def show_balance(message_or_callback, user_id: int):
     caption = (
         f"💼 <b>Ваш баланс:</b> {banans} генераций\n"
         f"🎁 Бесплатно: {FREE_DAILY_LIMIT}/день\n\n"
+        
         f"🆔 <b>Ваш ID:</b> <code>{user.id}</code>\n"
         f"👤 <b>Ваш ник:</b> @{user.username or 'без ника'}\n\n"
         "⚠️ <b>ВАЖНО!</b>\n"
@@ -341,8 +385,12 @@ async def handle_banans_callback(callback: CallbackQuery):
 
 @router.message(Command("img2img"))
 async def img2img(message: Message):
-    user_states[message.from_user.id] = {"mode": "img2img", "images": []}
-    await message.answer("🖼️ Отправьте изображение, затем напишите промт.")
+    user_id = message.from_user.id
+    user_states[user_id] = {
+        "mode": "img2img",
+        "images": []
+    }
+    await show_ratio_selection_img2img(message)
 
 
 # ================== PHOTO ==================
@@ -374,33 +422,13 @@ async def handle_photo(message: Message):
         await message.answer("📸 Фото добавлено! Можете написать промт.")
 
 # ================== TEXT / GENERATION ==================
-# @router.callback_query(F.data == "back_to_start")
-# async def back_to_start(callback: CallbackQuery):
-#     # Очищаем временные данные
-#     user_id = callback.from_user.id
-#     if user_id in user_states:
-#         user_states[user_id].pop("mode", None)
-#         user_states[user_id].pop("aspect_ratio", None)
-#         user_states[user_id].pop("images", None)
+
 @router.callback_query(F.data == "back_to_start")
 async def back_to_start(callback: CallbackQuery):
     # очищаем временное состояние
     user_states.pop(callback.from_user.id, None)
     # показываем главное меню
     await show_main_menu(callback)
-    await callback.answer()
-    
-    # Показываем /start
-    photo = FSInputFile("img/banana3.png")
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🖼️ Создать картинку с нуля", callback_data="select_mode:txt2img")],
-        [InlineKeyboardButton(text="📷 Рдактировать ваше фото", callback_data="select_mode:img2img")],
-    ])
-    await callback.message.answer_photo(
-        photo=photo,
-        caption="🎨 <b>AI Image Generator</b>\n\nВыберите режим генерации:",
-        reply_markup=kb
-    )
     await callback.answer()
     
 
@@ -471,7 +499,8 @@ async def generate(message: Message):
             reply_markup=kb
         )
 
-        await finalize_generation(message.from_user.id, gen_type)
+        await commit_generation(message.from_user.id, gen_type)
+        
         try:
             await info_msg.delete()
         except:
