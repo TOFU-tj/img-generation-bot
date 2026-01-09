@@ -1,9 +1,12 @@
 import os
 import logging
 import datetime
-import aiosqlite
 import replicate
 import asyncio
+import db
+from db import init_db_pool
+
+
 
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -27,7 +30,6 @@ if not TELEGRAM_TOKEN or not REPLICATE_TOKEN:
 
 os.environ["REPLICATE_API_TOKEN"] = REPLICATE_TOKEN
 
-DB_NAME = "telegram_users.db"
 FREE_DAILY_LIMIT = 1
 
 logging.basicConfig(level=logging.INFO)
@@ -45,125 +47,67 @@ router = Router()
 user_states = {}
 
 # ================== DB ==================
-
-async def init_db():
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            telegram_id INTEGER PRIMARY KEY,
-            username TEXT,
-            created_at TEXT,
-            generation_tokens INTEGER DEFAULT 0
-        )
-        """)
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS daily_usage (
-            telegram_id INTEGER,
-            date TEXT,
-            used INTEGER DEFAULT 0,
-            PRIMARY KEY (telegram_id, date)
-        )
-        """)
-        await db.commit()
-
 async def register_user(telegram_id: int, username: str):
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute("""
-        INSERT OR IGNORE INTO users
-        (telegram_id, username, created_at)
-        VALUES (?, ?, ?)
-        """, (telegram_id, username, datetime.datetime.utcnow().date().isoformat()))
-        await db.commit()
+    async with db.DB_POOL.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO users (telegram_id, username, created_at)
+            VALUES ($1, $2, CURRENT_DATE)
+            ON CONFLICT (telegram_id) DO NOTHING
+        """, telegram_id, username)
 
 async def get_balance(telegram_id: int) -> int:
-    async with aiosqlite.connect(DB_NAME) as db:
-        cur = await db.execute(
-            "SELECT generation_tokens FROM users WHERE telegram_id = ?",
-            (telegram_id,)
+    async with db.DB_POOL.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT generation_tokens FROM users WHERE telegram_id = $1",
+            telegram_id
         )
-        row = await cur.fetchone()
-        return row[0] if row else 0
-
-# ================== TOKENS ==================
-
-async def use_free_generation(telegram_id: int) -> bool:
-    today = datetime.datetime.utcnow().date().isoformat()
-
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute("BEGIN IMMEDIATE")
-
-        cur = await db.execute("""
-        SELECT used FROM daily_usage
-        WHERE telegram_id = ? AND date = ?
-        """, (telegram_id, today))
-        row = await cur.fetchone()
-
-        if row is None:
-            await db.execute("""
-            INSERT INTO daily_usage (telegram_id, date, used)
-            VALUES (?, ?, 1)
-            """, (telegram_id, today))
-            await db.commit()
-            return True
-
-        if row[0] < FREE_DAILY_LIMIT:
-            await db.execute("""
-            UPDATE daily_usage
-            SET used = used + 1
-            WHERE telegram_id = ? AND date = ?
-            """, (telegram_id, today))
-            await db.commit()
-            return True
-
-        await db.rollback()
-        return False
+        return row["generation_tokens"] if row else 0
 
 async def can_generate(telegram_id: int) -> str | None:
-    today = datetime.datetime.utcnow().date().isoformat()
-
-    async with aiosqlite.connect(DB_NAME) as db:
-        # проверяем free
-        cur = await db.execute("""
+    async with db.DB_POOL.acquire() as conn:
+        row = await conn.fetchrow("""
             SELECT used FROM daily_usage
-            WHERE telegram_id = ? AND date = ?
-        """, (telegram_id, today))
-        row = await cur.fetchone()
+            WHERE telegram_id = $1 AND date = CURRENT_DATE
+        """, telegram_id)
 
-        if row is None or row[0] < FREE_DAILY_LIMIT:
+        if row is None or row["used"] < FREE_DAILY_LIMIT:
             return "free"
 
-        # проверяем платные
-        cur = await db.execute("""
+        row = await conn.fetchrow("""
             SELECT generation_tokens FROM users
-            WHERE telegram_id = ?
-        """, (telegram_id,))
-        row = await cur.fetchone()
+            WHERE telegram_id = $1
+        """, telegram_id)
 
-        if row and row[0] > 0:
+        if row and row["generation_tokens"] > 0:
             return "paid"
 
     return None
 
-async def commit_generation(telegram_id: int, gen_type: str):
-    today = datetime.datetime.utcnow().date().isoformat()
 
-    async with aiosqlite.connect(DB_NAME) as db:
+
+
+
+# ================== TOKENS ==================
+
+
+async def commit_generation(telegram_id: int, gen_type: str):
+    async with db.DB_POOL.acquire() as conn:
         if gen_type == "free":
-            await db.execute("""
+            await conn.execute("""
                 INSERT INTO daily_usage (telegram_id, date, used)
-                VALUES (?, ?, 1)
-                ON CONFLICT(telegram_id, date)
-                DO UPDATE SET used = used + 1
-            """, (telegram_id, today))
+                VALUES ($1, CURRENT_DATE, 1)
+                ON CONFLICT (telegram_id, date)
+                DO UPDATE SET used = daily_usage.used + 1
+            """, telegram_id)
 
         elif gen_type == "paid":
-            await db.execute("""
+            await conn.execute("""
                 UPDATE users
                 SET generation_tokens = generation_tokens - 1
-                WHERE telegram_id = ?
-            """, (telegram_id,))
+                WHERE telegram_id = $1
+            """, telegram_id)
 
-        await db.commit()
+
 
 
 
@@ -520,6 +464,7 @@ ADMIN_IDS = {
     for x in os.getenv("ADMIN_IDS", "").split(",")
     if x.strip().isdigit()
 }
+
 @router.message(Command("add_tokens_for_users"))
 async def add_tokens(message: Message):
     if message.from_user.id not in ADMIN_IDS:
@@ -543,27 +488,24 @@ async def add_tokens(message: Message):
         await message.answer("❌ Неверные параметры.")
         return
 
-    async with aiosqlite.connect(DB_NAME, timeout=10) as db:
-        cursor = await db.execute(
-            "SELECT generation_tokens FROM users WHERE telegram_id = ?",
-            (target_id,)
+    async with db.DB_POOL.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT generation_tokens FROM users WHERE telegram_id = $1",
+            target_id
         )
-        row = await cursor.fetchone()
 
         if not row:
             await message.answer("❌ Пользователь не найден.")
             return
 
-        await db.execute(
-            "UPDATE users SET generation_tokens = generation_tokens + ? WHERE telegram_id = ?",
-            (tokens, target_id)
+        await conn.execute(
+            "UPDATE users SET generation_tokens = generation_tokens + $1 WHERE telegram_id = $2",
+            tokens, target_id
         )
-        await db.commit()
 
-    # ✅ Уведомление пользователю (ЛИЧНО)
+    # ✅ уведомление пользователю (ОДИН РАЗ)
     try:
         photo = FSInputFile("img/tokens.PNG")
-
         await bot.send_photo(
             chat_id=target_id,
             photo=photo,
@@ -574,19 +516,16 @@ async def add_tokens(message: Message):
                 "Можете продолжать генерацию ✨"
             )
         )
-        
     except Exception as e:
-        # если пользователь не писал боту
         await message.answer(
-            f"⚠️ Токены начислены, но не удалось уведомить пользователя.\n"
-            f"Причина: {str(e)[:100]}"
+            "⚠️ Токены начислены, но не удалось уведомить пользователя."
         )
-        return
 
-    # ✅ Ответ админу
+    # ✅ ответ админу
     await message.answer(
-        f"✅ Начислено <b>{tokens}</b> генераций пользователю <code>{target_id}</code>"  
+        f"✅ Начислено <b>{tokens}</b> генераций пользователю <code>{target_id}</code>"
     )
+
 
 
 @router.message(Command("users"))
@@ -595,36 +534,61 @@ async def list_users(message: Message):
         await message.answer("❌ У вас нет прав.")
         return
 
-    async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute("""
+    async with db.DB_POOL.acquire() as conn:
+        rows = await conn.fetch("""
             SELECT telegram_id, username, generation_tokens
             FROM users
             ORDER BY generation_tokens DESC
             LIMIT 50
         """)
-        rows = await cursor.fetchall()
 
     if not rows:
         await message.answer("👀 Пользователей нет.")
         return
 
     text = "👥 <b>Пользователи:</b>\n\n"
-    for uid, username, tokens in rows:
+    for row in rows:
         text += (
-            f"🆔 <code>{uid}</code>\n"
-            f"👤 @{username or 'без ника'}\n"
-            f"🍌 Токены: <b>{tokens}</b>\n\n"
+            f"🆔 <code>{row['telegram_id']}</code>\n"
+            f"👤 @{row['username'] or 'без ника'}\n"
+            f"🍌 Токены: <b>{row['generation_tokens']}</b>\n\n"
         )
 
     await message.answer(text[:4000])
+
+
+    
+# ================== DB INIT ==================
+async def init_db():
+    async with db.DB_POOL.acquire() as conn:
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            telegram_id BIGINT PRIMARY KEY,
+            username TEXT,
+            created_at DATE,
+            generation_tokens INTEGER DEFAULT 0
+        )
+        """)
+
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_usage (
+            telegram_id BIGINT,
+            date DATE,
+            used INTEGER DEFAULT 0,
+            PRIMARY KEY (telegram_id, date)
+        )
+        """)
+
 
 # ================== RUN ==================
 
 dp.include_router(router)
 
 async def main():
-    await init_db()
+    await init_db_pool()   # ← СОЗДАЁМ POOL
+    await init_db()        # ← СОЗДАЁМ ТАБЛИЦЫ
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     logging.info("🚀 Bot started")
