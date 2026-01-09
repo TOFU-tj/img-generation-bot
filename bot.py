@@ -5,9 +5,6 @@ import replicate
 import asyncio
 import db
 from db import init_db_pool
-
-
-
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
@@ -582,13 +579,10 @@ async def init_db():
 # ================== RUN ==================
 
 dp.include_router(router)
-
 async def main():
     await init_db_pool()   # ← СОЗДАЁМ POOL
     await init_db()        # ← СОЗДАЁМ ТАБЛИЦЫ
     await dp.start_polling(bot)
-
-
 if __name__ == "__main__":
     logging.info("🚀 Bot started")
     asyncio.run(main())
