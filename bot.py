@@ -165,6 +165,17 @@ async def support_exit(callback: CallbackQuery):
 
 @router.message(F.text & ~F.text.startswith("/"))
 async def text_router(message: Message):
+    user_id = message.from_user.id  # ← ВОТ ТУТ
+
+    is_subscribed = await check_subscription(bot, user_id)
+    if not is_subscribed:
+        await message.answer(
+            "🔒 Для использования бота необходимо подписаться на наш канал 👇",
+            reply_markup=subscribe_kb()
+        )
+        return
+
+    
     user_id = message.from_user.id
     text = message.text.strip()
     if not text:
@@ -224,6 +235,62 @@ async def user_reply(message: Message):
 
 
 # ================== Support ==================
+# ================== CheckSubs ==================
+
+CHANNEL_ID = -1003443911599  # ID вашего канала
+
+async def check_subscription(bot: Bot, user_id: int) -> bool:
+    try:
+        member = await bot.get_chat_member(CHANNEL_ID, user_id)
+        logging.info(
+            f"SUB CHECK | user={user_id} | status={member.status}"
+        )
+        return member.status in ("member", "administrator", "creator")
+    except Exception as e:
+        logging.error(f"SUB CHECK ERROR | user={user_id} | {e}")
+        return False
+
+
+
+def subscribe_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Подписаться на канал",
+                    url="https://t.me/BananaArtLab"  # ← замени на свой канал
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔄 Проверить подписку",
+                    callback_data="check_subs"
+                )
+            ]
+        ]
+    )
+
+
+@router.callback_query(F.data == "check_subs")
+async def recheck_subscription(callback: CallbackQuery):
+    is_subscribed = await check_subscription(bot, callback.from_user.id)
+
+    if is_subscribed:
+        await callback.message.answer("✅ Подписка подтверждена! Спасибо ❤️")
+        await show_main_menu(callback)
+    else:
+        await callback.message.answer(
+            "❌ Вы всё ещё не подписаны на канал.\n\n"
+            "Подпишитесь и нажмите «Проверить подписку».",
+            reply_markup=subscribe_kb()
+        )
+
+    await callback.answer()
+
+# ===============================================
+
+
+# ====================СheckSubs========================
 
 
 async def show_ratio_selection(message: Message):
@@ -296,8 +363,19 @@ async def show_main_menu(message_or_callback):
 
 @router.message(Command("start"))
 async def start(message: Message):
-    await register_user(message.from_user.id, message.from_user.username)
+    user_id = message.from_user.id
+
+    is_subscribed = await check_subscription(bot, user_id)
+    if not is_subscribed:
+        await message.answer(
+            "🔒 Для использования бота необходимо подписаться на наш канал 👇",
+            reply_markup=subscribe_kb()
+        )
+        return
+
+    await register_user(user_id, message.from_user.username)
     await show_main_menu(message)
+
 
 @router.message(Command("menu"))
 async def menu(message: Message):
