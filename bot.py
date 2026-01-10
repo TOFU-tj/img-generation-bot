@@ -670,6 +670,74 @@ async def list_users(message: Message):
         )
 
     await message.answer(text[:4000])
+    
+    
+async def remove_tokens(telegram_id: int, amount: int) -> bool:
+    """
+    Списывает amount платных токенов.
+    Возвращает True если списание успешно, False если токенов не хватило.
+    """
+    if amount <= 0:
+        return False
+
+    async with db.DB_POOL.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT generation_tokens FROM users WHERE telegram_id = $1",
+            telegram_id
+        )
+
+        if not row:
+            return False
+
+        current = row["generation_tokens"]
+
+        if current < amount:
+            return False  # ❌ не хватает токенов
+
+        await conn.execute(
+            """
+            UPDATE users
+            SET generation_tokens = generation_tokens - $1
+            WHERE telegram_id = $2
+            """,
+            amount,
+            telegram_id
+        )
+
+    return True
+
+@router.message(Command("remove_tokens"))
+async def remove_tokens_cmd(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        await message.answer("❌ Нет прав.")
+        return
+
+    parts = message.text.split()
+    if len(parts) != 3:
+        await message.answer(
+            "Использование:\n/remove_tokens <telegram_id> <кол-во>"
+        )
+        return
+
+    try:
+        target_id = int(parts[1])
+        amount = int(parts[2])
+        if amount <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Неверные параметры.")
+        return
+
+    success = await remove_tokens(target_id, amount)
+    if not success:
+        await message.answer("❌ Недостаточно токенов у пользователя.")
+        return
+
+    await message.answer(
+        f"✅ Списано <b>{amount}</b> токенов у пользователя <code>{target_id}</code>"
+    )
+
+
 
 
 # ================== DB INIT ==================
