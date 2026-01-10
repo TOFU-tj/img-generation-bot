@@ -29,7 +29,7 @@ if not TELEGRAM_TOKEN or not REPLICATE_TOKEN:
 
 os.environ["REPLICATE_API_TOKEN"] = REPLICATE_TOKEN
 
-FREE_DAILY_LIMIT = 2
+FREE_DAILY_LIMIT = 1
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
