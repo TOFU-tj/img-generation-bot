@@ -18,6 +18,8 @@ from aiogram.types import FSInputFile
 # ================== CONFIG ==================
 
 load_dotenv()
+SUPPORT_CHAT_ID = 645713706  # твой Telegram ID
+SUPPORT_MODE = "support"
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 REPLICATE_TOKEN = os.getenv("REPLICATE_API_TOKEN", "").strip()
@@ -28,8 +30,9 @@ if not TELEGRAM_TOKEN or not REPLICATE_TOKEN:
 os.environ["REPLICATE_API_TOKEN"] = REPLICATE_TOKEN
 
 FREE_DAILY_LIMIT = 2
-
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 # ================== BOT ==================
 
@@ -79,6 +82,24 @@ async def can_generate(telegram_id: int) -> str | None:
             return "paid"
 
     return None
+
+async def get_free_left_today(telegram_id: int) -> int:
+    async with db.DB_POOL.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT used
+            FROM daily_usage
+            WHERE telegram_id = $1 AND date = CURRENT_DATE
+            """,
+            telegram_id
+        )
+
+    used = row["used"] if row else 0
+    return max(FREE_DAILY_LIMIT - used, 0)
+
+
+
+
 # ================== TOKENS ==================
 
 
@@ -108,6 +129,103 @@ def translate(text: str) -> str:
         return text
 
 # ================== HELPERS ==================
+
+def support_exit_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🏠 В меню", callback_data="support:exit")]
+        ]
+    )
+
+
+@router.callback_query(F.data == "support:start")
+async def support_start(callback: CallbackQuery):
+    user_states[callback.from_user.id] = {"mode": SUPPORT_MODE}
+
+    photo = FSInputFile("img/support.png")
+    await callback.message.answer_photo(
+        photo=photo,
+        caption=(
+            "🧑‍💻 <b>Служба поддержки</b>\n\n"
+            "Мы здесь, чтобы помочь вам 💙\n\n"
+            "✍️ Напишите ваш вопрос или опишите проблему — "
+            "оператор ответит вам прямо в этом чате.\n\n"
+            "Чтобы вернуться в бот, нажмите кнопку ниже 👇"
+        ),
+        reply_markup=support_exit_kb()
+    )
+    await callback.answer()
+    
+@router.callback_query(F.data == "support:exit")
+async def support_exit(callback: CallbackQuery):
+    user_states.pop(callback.from_user.id, None)
+
+    await callback.message.answer("🏠 Вы вернулись в меню")
+    await show_main_menu(callback)
+    await callback.answer()
+
+@router.message(F.text & ~F.text.startswith("/"))
+async def text_router(message: Message):
+    user_id = message.from_user.id
+    text = message.text.strip()
+    if not text:
+        return
+
+    state = user_states.get(user_id, {})
+    mode = state.get("mode")
+
+    # 🆘 SUPPORT MODE
+    if mode == SUPPORT_MODE:
+        msg = (
+            "🆘 <b>Новое сообщение в поддержку</b>\n\n"
+            f"👤 @{message.from_user.username or 'без ника'}\n"
+            f"🆔 <code>{user_id}</code>\n\n"
+            f"💬 {text}\n\n"
+            "✏️ Ответить:\n"
+            "<code>/user_reply USER_ID сообщение</code>"
+        )
+        await bot.send_message(SUPPORT_CHAT_ID, msg)
+        await message.answer("✅ Сообщение отправлено в поддержку")
+        return
+
+    # 🎨 GENERATION MODE
+    if mode in ("txt2img", "img2img"):
+        await generate_image(message)
+        return
+
+    # ❓ если режим не выбран
+    await message.answer("ℹ️ Сначала выберите режим генерации в меню.")
+
+
+@router.message(Command("user_reply"))
+async def user_reply(message: Message):
+    if message.from_user.id != SUPPORT_CHAT_ID:
+        return
+
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 3:
+        await message.answer(
+            "❌ Использование:\n"
+            "/user_reply <user_id> <сообщение>"
+        )
+        return
+
+    try:
+        user_id = int(parts[1])
+    except ValueError:
+        await message.answer("❌ Неверный user_id")
+        return
+
+    await bot.send_message(
+        chat_id=user_id,
+        text=f"🧑‍💻 <b>Ответ поддержки:</b>\n\n{parts[2]}"
+    )
+
+    await message.answer("✅ Ответ отправлен пользователю")
+
+
+# ================== Support ==================
+
 
 async def show_ratio_selection(message: Message):
     """Показывает кнопки выбора соотношения сторон"""
@@ -161,7 +279,8 @@ async def show_main_menu(message_or_callback):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🖼️ Создать картинку с нуля", callback_data="select_mode:txt2img")],
         [InlineKeyboardButton(text="📷 Редактировать ваше фото", callback_data="select_mode:img2img")],
-        [InlineKeyboardButton(text="💰 Получить токены", callback_data="banans:banans")]
+        [InlineKeyboardButton(text="💰 Получить токены", callback_data="banans:banans")],
+        [InlineKeyboardButton(text="🧑‍💻 Связаться с поддержкой", callback_data="support:start")]
     ])
 
     photo = FSInputFile("img/menu.png")
@@ -171,17 +290,10 @@ async def show_main_menu(message_or_callback):
     )
 
     if isinstance(message_or_callback, Message):
-        await message_or_callback.answer_photo(
-            photo=photo,
-            caption=caption,
-            reply_markup=kb
-        )
+        await message_or_callback.answer_photo(photo=photo, caption=caption, reply_markup=kb)
     else:
-        await message_or_callback.message.answer_photo(
-            photo=photo,
-            caption=caption,
-            reply_markup=kb
-        )
+        await message_or_callback.message.answer_photo(photo=photo, caption=caption, reply_markup=kb)
+
 
 @router.message(Command("start"))
 async def start(message: Message):
@@ -260,6 +372,8 @@ async def show_balance(message_or_callback, user_id: int):
     user = message_or_callback.from_user if isinstance(message_or_callback, Message) else message_or_callback.from_user
 
     photo = FSInputFile("img/price.png")
+    free_left = await get_free_left_today(user_id)
+
     
     base_url5 = "https://t.me/tribute/app?startapp=ppo9"
     base_url10 = "https://t.me/tribute/app?startapp=ppoa"
@@ -280,14 +394,14 @@ async def show_balance(message_or_callback, user_id: int):
     ])
 
     caption = (
-        f"💼 <b>Ваш баланс:</b> {banans} генераций\n"
-        f"🎁 Бесплатно: {FREE_DAILY_LIMIT}/день\n\n"
-        
+        f"💼 <b>Ваш баланс:</b>\n\n"
+        f"🍌 <b>Платные генерации:</b> {banans}\n"
+        f"🎁 <b>Бесплатно сегодня:</b> {free_left} / {FREE_DAILY_LIMIT}\n\n"
         f"🆔 <b>Ваш ID:</b> <code>{user.id}</code>\n"
         f"👤 <b>Ваш ник:</b> @{user.username or 'без ника'}\n\n"
         "⚠️ <b>ВАЖНО!</b>\n"
         "При оплате <u>обязательно</u> укажите ваш ID и ник в заказе.\n\n"
-        "⏰ <b><u>ТОКЕНЫ НАЧИСЛЯЮТСЯ ПОСЛЕ РУЧНОЙ ПРОВЕРКИ ОПЛАТЫ НАШЕЙ ПОДДЕРЖКОЙ</u></b>\n\n"
+        "⏰ <b><u>ТОКЕНЫ НАЧИСЛЯЮТСЯ ПОСЛЕ РУЧНОЙ ПРОВЕРКИ ОПЛАТЫ</u></b>\n\n"
         "👇 Выберите пакет генераций:"
     )
 
@@ -357,18 +471,38 @@ async def back_to_start(callback: CallbackQuery):
     await show_main_menu(callback)
     await callback.answer()
     
+async def generate_image(message: Message):
+    user_id = message.from_user.id
+    state = user_states.get(user_id, {})
 
-@router.message(F.text & ~F.text.startswith("/"))
-async def generate(message: Message):
+    # 🆘 ПОДДЕРЖКА
+    if state.get("mode") == SUPPORT_MODE:
+        text = (
+            "🆘 <b>Новое сообщение в поддержку</b>\n\n"
+            f"👤 @{message.from_user.username or 'без ника'}\n"
+            f"🆔 <code>{user_id}</code>\n\n"
+            f"💬 {message.text}\n\n"
+            "✏️ Ответить:\n"
+            "<code>/user_reply USER_ID сообщение</code>"
+        )
+        await bot.send_message(SUPPORT_CHAT_ID, text)
+        await message.answer("✅ Сообщение отправлено в поддержку")
+        return
+
+    # ✅ ВОТ ЭТОГО У ТЕБЯ НЕ ХВАТАЛО
     prompt = message.text.strip()
     if not prompt:
         return
 
-    gen_type = await can_generate(message.from_user.id)
+    gen_type = await can_generate(user_id)
     if not gen_type:
         photo = FSInputFile("img/no_tokens.png")
-        await message.answer_photo(photo=photo, caption="❌ Генерации закончились. Используйте /banans.")
+        await message.answer_photo(
+            photo=photo,
+            caption="❌ Генерации закончились. Используйте /banans."
+        )
         return
+
     info_msg = await message.answer(
         "🪄 Генерация началась\n"
         "⏳ Обычно занимает ~20–40 секунд\n"
@@ -376,12 +510,11 @@ async def generate(message: Message):
     )
 
     try:
-        user_id = message.from_user.id
-        state = user_states.get(user_id, {})
         prompt_en = translate(prompt)
         aspect_ratio = state.get("aspect_ratio", "1:1")
 
         loop = asyncio.get_running_loop()
+
         if state.get("mode") == "img2img":
             output = await loop.run_in_executor(
                 None,
@@ -398,7 +531,6 @@ async def generate(message: Message):
                 )
             )
             user_states.pop(user_id, None)
-
         else:
             output = await loop.run_in_executor(
                 None,
@@ -412,11 +544,12 @@ async def generate(message: Message):
                     }
                 )
             )
+
         image_url = str(output)
 
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🏠 Меню", callback_data="back_to_start")]
-        ])
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🏠 Меню", callback_data="back_to_start")]]
+        )
 
         await bot.send_photo(
             chat_id=message.chat.id,
@@ -425,12 +558,9 @@ async def generate(message: Message):
             reply_markup=kb
         )
 
-        await commit_generation(message.from_user.id, gen_type)
-        
-        try:
-            await info_msg.delete()
-        except:
-            pass
+        await commit_generation(user_id, gen_type)
+
+        await info_msg.delete()
 
     except Exception as e:
         try:
@@ -439,6 +569,7 @@ async def generate(message: Message):
             pass
 
         await message.answer(f"❌ Ошибка: <code>{str(e)[:300]}</code>")
+
 
 # =========================================
 ADMIN_IDS = {
@@ -518,9 +649,16 @@ async def list_users(message: Message):
 
     async with db.DB_POOL.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT telegram_id, username, generation_tokens
-            FROM users
-            ORDER BY generation_tokens DESC
+            SELECT
+                u.telegram_id,
+                u.username,
+                u.generation_tokens,
+                COALESCE(d.used, 0) AS used_today
+            FROM users u
+            LEFT JOIN daily_usage d
+                ON u.telegram_id = d.telegram_id
+                AND d.date = CURRENT_DATE
+            ORDER BY u.generation_tokens DESC
             LIMIT 50
         """)
 
@@ -530,13 +668,19 @@ async def list_users(message: Message):
 
     text = "👥 <b>Пользователи:</b>\n\n"
     for row in rows:
+        free_left = FREE_DAILY_LIMIT - row["used_today"]
+        if free_left < 0:
+            free_left = 0
+
         text += (
             f"🆔 <code>{row['telegram_id']}</code>\n"
             f"👤 @{row['username'] or 'без ника'}\n"
-            f"🍌 Токены: <b>{row['generation_tokens']}</b>\n\n"
+            f"🍌 Платные: <b>{row['generation_tokens']}</b>\n"
+            f"🎁 Бесплатно сегодня: <b>{free_left}/{FREE_DAILY_LIMIT}</b>\n\n"
         )
 
     await message.answer(text[:4000])
+
 
 # ================== DB INIT ==================
 async def init_db():
@@ -558,7 +702,6 @@ async def init_db():
             PRIMARY KEY (telegram_id, date)
         )
         """)
-
 
 # ================== RUN ==================
 
