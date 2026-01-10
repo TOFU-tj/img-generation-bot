@@ -239,6 +239,44 @@ async def user_reply(message: Message):
 
 CHANNEL_ID = -1003443911599  # ID вашего канала
 
+from aiogram import BaseMiddleware
+from aiogram.types import Message, CallbackQuery
+from aiogram.exceptions import TelegramBadRequest
+
+class SubscriptionMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        # пропускаем админа
+        if isinstance(event, (Message, CallbackQuery)):
+            user_id = event.from_user.id
+        else:
+            return await handler(event, data)
+
+        if user_id in ADMIN_IDS:
+            return await handler(event, data)
+
+        try:
+            member = await bot.get_chat_member(CHANNEL_ID, user_id)
+            if member.status in ("member", "administrator", "creator"):
+                return await handler(event, data)
+        except TelegramBadRequest:
+            pass
+
+        # ❌ НЕ ПОДПИСАН
+        if isinstance(event, CallbackQuery):
+            await event.message.answer(
+                "🔒 Для использования бота подпишитесь на канал 👇",
+                reply_markup=subscribe_kb()
+            )
+            await event.answer()
+        else:
+            await event.answer(
+                "🔒 Для использования бота подпишитесь на канал 👇",
+                reply_markup=subscribe_kb()
+            )
+
+        return  # ⛔ БЛОКИРУЕМ ВСЁ
+
+
 async def check_subscription(bot: Bot, user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(CHANNEL_ID, user_id)
@@ -286,6 +324,11 @@ async def recheck_subscription(callback: CallbackQuery):
         )
 
     await callback.answer()
+    
+    
+dp.message.middleware(SubscriptionMiddleware())
+dp.callback_query.middleware(SubscriptionMiddleware())
+
 
 # ===============================================
 
