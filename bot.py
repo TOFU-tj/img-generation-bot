@@ -137,7 +137,6 @@ def support_exit_kb():
         ]
     )
 
-
 @router.callback_query(F.data == "support:start")
 async def support_start(callback: CallbackQuery):
     user_states[callback.from_user.id] = {"mode": SUPPORT_MODE}
@@ -439,19 +438,14 @@ async def img2img(message: Message):
 async def handle_photo(message: Message):
     user_id = message.from_user.id
     state = user_states.get(user_id)
-
     if not state or state.get("mode") != "img2img":
         return
-
     if "aspect_ratio" not in state:
         await message.answer("❗ Сначала выберите соотношение сторон.")
         return
-
     file = await bot.get_file(message.photo[-1].file_id)
     url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file.file_path}"
-
     state.setdefault("images", []).append(url)
-
     if len(state["images"]) == 1:
         await message.answer(
             "📸 Фото получено!\n\n"
@@ -465,9 +459,7 @@ async def handle_photo(message: Message):
 
 @router.callback_query(F.data == "back_to_start")
 async def back_to_start(callback: CallbackQuery):
-    # очищаем временное состояние
     user_states.pop(callback.from_user.id, None)
-    # показываем главное меню
     await show_main_menu(callback)
     await callback.answer()
     
@@ -488,8 +480,6 @@ async def generate_image(message: Message):
         await bot.send_message(SUPPORT_CHAT_ID, text)
         await message.answer("✅ Сообщение отправлено в поддержку")
         return
-
-    # ✅ ВОТ ЭТОГО У ТЕБЯ НЕ ХВАТАЛО
     prompt = message.text.strip()
     if not prompt:
         return
@@ -544,7 +534,6 @@ async def generate_image(message: Message):
                     }
                 )
             )
-
         image_url = str(output)
 
         kb = InlineKeyboardMarkup(
@@ -572,6 +561,8 @@ async def generate_image(message: Message):
 
 
 # =========================================
+
+
 ADMIN_IDS = {
     int(x)
     for x in os.getenv("ADMIN_IDS", "").split(",")
@@ -633,7 +624,6 @@ async def add_tokens(message: Message):
         await message.answer(
             "⚠️ Токены начислены, но не удалось уведомить пользователя."
         )
-
     # ✅ ответ админу
     await message.answer(
         f"✅ Начислено <b>{tokens}</b> генераций пользователю <code>{target_id}</code>"
